@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 # Author : AloneMonkey
@@ -31,12 +31,15 @@ if IS_PY2:
 script_dir = os.path.dirname(os.path.realpath(__file__))
 
 DUMP_JS = os.path.join(script_dir, 'dump.js')
+FIX_MACHO = os.path.join(script_dir, 'FixMachO')
 
 User = 'root'
 Password = 'alpine'
 Host = 'localhost'
 Port = 2222
 KeyFileName = None
+Fixhash = False
+Fakesign = False
 
 TEMP_DIR = tempfile.gettempdir()
 PAYLOAD_DIR = 'Payload'
@@ -83,6 +86,21 @@ def generate_ipa(path, display_name):
             from_dir = os.path.join(path, key)
             to_dir = os.path.join(path, app_name, value)
             if key != 'app':
+                ###################################################
+                if Fixhash:
+                    # fix hash by piaoyun
+                    exec_args = (FIX_MACHO, from_dir)
+                    try:
+                        subprocess.check_call(exec_args)
+                    except subprocess.CalledProcessError as err:
+                        print(err)
+                elif Fakesign:
+                    # fake sign
+                    print("[Fake sign]: {0}".format(from_dir))
+                    ENT_PATH = os.path.join(TEMP_DIR, 'ent.xml')
+                    subprocess.getoutput("codesign -d --entitlements :- {0} > {1}".format(from_dir, ENT_PATH))
+                    subprocess.getoutput("codesign -f -s - --entitlements {1} {0}".format(from_dir, ENT_PATH))
+                ###################################################
                 shutil.move(from_dir, to_dir)
 
         target_dir = './' + PAYLOAD_DIR
@@ -292,6 +310,8 @@ def start_dump(session, ipa_name):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='frida-ios-dump (by AloneMonkey v2.0)')
     parser.add_argument('-l', '--list', dest='list_applications', action='store_true', help='List the installed apps')
+    parser.add_argument('-f', '--fix_hash', dest='fix_hash', action='store_true', help='Fix sign hash')
+    parser.add_argument('-s', '--fake_sign', dest='fake_sign', action='store_true', help='Fake sign')
     parser.add_argument('-o', '--output', dest='output_ipa', help='Specify name of the decrypted IPA')
     parser.add_argument('-H', '--host', dest='ssh_host', help='Specify SSH hostname')
     parser.add_argument('-p', '--port', dest='ssh_port', help='Specify SSH port')
@@ -327,6 +347,10 @@ if __name__ == '__main__':
             Password = args.ssh_password
         if args.ssh_key_filename:
             KeyFileName = args.ssh_key_filename
+        if args.fix_hash:
+            Fixhash = args.fix_hash
+        if args.fake_sign:
+            Fakesign = args.fake_sign
 
         try:
             ssh = paramiko.SSHClient()
